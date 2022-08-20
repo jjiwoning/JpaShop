@@ -39,7 +39,6 @@ public class MemberApiController {
         member.setName(request.getName());
 
         Long id = memberService.join(member);
-
         return new CreateMemberResponse(id);
     }
 
