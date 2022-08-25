@@ -6,6 +6,10 @@ import jpabook.jpashop.domain.OrderItem;
 import jpabook.jpashop.domain.OrderStatus;
 import jpabook.jpashop.repository.OrderRepository;
 import jpabook.jpashop.repository.OrderSearch;
+import jpabook.jpashop.repository.order.query.OrderFlatDto;
+import jpabook.jpashop.repository.order.query.OrderItemQueryDto;
+import jpabook.jpashop.repository.order.query.OrderQueryDto;
+import jpabook.jpashop.repository.order.query.OrderQueryRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,14 +20,17 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static java.util.stream.Collectors.*;
+
 @RestController
 @RequiredArgsConstructor
 public class OrderApiController {
 
     private final OrderRepository orderRepository;
+    private final OrderQueryRepository orderQueryRepository;
 
     @GetMapping("/api/v1/orders")
-    public List<Order> ordersV1(){
+    public List<Order> ordersV1() {
         List<Order> all = orderRepository.findAllByString(new OrderSearch());
         for (Order order : all) {
             order.getMember().getName();
@@ -35,40 +42,51 @@ public class OrderApiController {
     }
 
     @GetMapping("/api/v2/orders")
-    public List<OrderDto> ordersV2(){
+    public List<OrderDto> ordersV2() {
         List<Order> orders = orderRepository.findAllByString(new OrderSearch());
-        List<OrderDto> collect = orders.stream()
-                .map(o -> new OrderDto(o))
-                .collect(Collectors.toList());
+        List<OrderDto> collect = orders.stream().map(o -> new OrderDto(o)).collect(toList());
 
         return collect;
     }
 
     @GetMapping("/api/v3/orders")
-    public List<OrderDto> ordersV3(){
+    public List<OrderDto> ordersV3() {
         List<Order> orders = orderRepository.findAllWithItem();
-        List<OrderDto> collect = orders.stream()
-                .map(o -> new OrderDto(o))
-                .collect(Collectors.toList());
+        List<OrderDto> collect = orders.stream().map(o -> new OrderDto(o)).collect(toList());
         // 문제점 : 1대다 조인이 있어서 같은 객체를 여러번 반환한다. -> 관계형 DB와 자바의 차이에서 발생하는 문제 -> distinct로 중복을 풀어줘야한다.
         return collect;
     }
 
     @GetMapping("/api/v3.1/orders")
-    public List<OrderDto> ordersV3_page(
-            @RequestParam(value = "offset", defaultValue = "0") int offset,
-            @RequestParam(value = "limit", defaultValue = "100") int limit
-            ){
+    public List<OrderDto> ordersV3_page(@RequestParam(value = "offset", defaultValue = "0") int offset, @RequestParam(value = "limit", defaultValue = "100") int limit) {
         List<Order> orders = orderRepository.findAllWithMemberDelivery(offset, limit);
-        List<OrderDto> collect = orders.stream()
-                .map(o -> new OrderDto(o))
-                .collect(Collectors.toList());
+        List<OrderDto> collect = orders.stream().map(o -> new OrderDto(o)).collect(toList());
 
         return collect;
     }
 
+    @GetMapping("/api/v4/orders")
+    public List<OrderQueryDto> ordersV4() {
+        return orderQueryRepository.findOrderQueryDtos();
+    }
+
+    @GetMapping("/api/v5/orders")
+    public List<OrderQueryDto> ordersV5() {
+        return orderQueryRepository.findAllByDto_optimization();
+    }
+
+    @GetMapping("/api/v6/orders")
+    public List<OrderQueryDto> ordersV6() {
+        List<OrderFlatDto> flats = orderQueryRepository.findAllByDto_flat();
+        return flats
+                .stream()
+                .collect(groupingBy(o -> new OrderQueryDto(o.getOrderId(), o.getName(), o.getOrderDate(), o.getOrderStatus(), o.getAddress()),
+                        mapping(o -> new OrderItemQueryDto(o.getOrderId(), o.getItemName(), o.getOrderPrice(), o.getCount()), toList())))
+                .entrySet().stream().map(e -> new OrderQueryDto(e.getKey().getOrderId(), e.getKey().getName(), e.getKey().getOrderDate(), e.getKey().getOrderStatus(), e.getKey().getAddress(), e.getValue())).collect(toList());
+    }
+
     @Data // -> jackson이 json을 만들 때 자바 프로퍼티 접근법으로 getter로 값 가져와서 json 만들어서 getter 필요!!
-    static class OrderDto{
+    static class OrderDto {
 
         private Long orderId;
         private String name;
@@ -83,20 +101,18 @@ public class OrderApiController {
             orderDate = o.getOrderDate();
             orderStatus = o.getStatus();
             address = o.getDelivery().getAddress();
-            orderItems = o.getOrderItems().stream()
-                    .map(orderItem -> new OrderItemDto(orderItem))
-                    .collect(Collectors.toList());
+            orderItems = o.getOrderItems().stream().map(orderItem -> new OrderItemDto(orderItem)).collect(toList());
         }
     }
 
     @Data
-    static class OrderItemDto{
+    static class OrderItemDto {
 
         private String itemName;
         private int orderPrice;
         private int count;
 
-        public OrderItemDto(OrderItem orderItem){
+        public OrderItemDto(OrderItem orderItem) {
             itemName = orderItem.getItem().getName();
             orderPrice = orderItem.getOrderPrice();
             count = orderItem.getCount();
